@@ -1,0 +1,104 @@
+Course registration app
+Introduction
+This document provides a step-by-step guide on how to set up, configure, and run Course registration app. The application is built using React for the frontend, Node.js for the backend, and PostgreSQL for the database.
+
+Prerequisites
+Before you begin, ensure you have the following installed on your system:
+
+Node.js and npm (Node Package Manager)
+PostgreSQL
+Git (optional, for cloning the repository)
+Setup Instructions
+1. Clone the Repository
+If the project is hosted on a version control system like GitHub, start by cloning the repository. If not, skip to the next step.
+
+git clone https://Course registration app
+cd Course registration app
+2. Database Setup
+Create the Database
+First, ensure your PostgreSQL server is running. Then create a new database:
+
+CREATE TABLE users (
+    user_id VARCHAR(12) PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,  -- Unique college email
+    password VARCHAR(255) NOT NULL,  -- Store securely hashed password
+    role VARCHAR(50) NOT NULL DEFAULT 'student', -- 'student', 'faculty', 'admin', etc.
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE  -- Account activation status
+);
+
+CREATE TABLE achievements (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    achievement_summary TEXT NOT NULL,
+    date_of_achievement DATE NOT NULL,
+    certificate TEXT,
+    photos TEXT[],
+    is_approved BOOLEAN DEFAULT false
+);
+
+CREATE TABLE courses (
+	course_id VARCHAR(255) PRIMARY KEY,
+    sem VARCHAR(255) NOT NULL,
+    course_name VARCHAR(255) NOT NULL,
+    course_credit INT NOT NULL,
+    course_eligibility INT NOT NULL,
+    course_type VARCHAR(255) NOT NULL,
+    faculty_id VARCHAR(255) NOT NULL,
+    available_seats INT NOT NULL,
+    course_syllabus TEXT NOT NULL
+);
+
+CREATE TABLE announcements (
+    announcement_id SERIAL PRIMARY KEY,
+    message VARCHAR(255) NOT NULL,
+    expiry_date TIMESTAMP NOT NULL, 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE student_courses (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    course_id VARCHAR(255) NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);
+
+
+CREATE TABLE attendance (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    course_id VARCHAR(255) NOT NULL,
+    attendance_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);
+Initialize the Database
+Navigate to the directory containing your database initialization scripts, and run them using psql:
+
+psql -d cmrcet -f path/to/your/database/init/script.sql
+3. Backend Setup
+Install Dependencies
+Navigate to the backend directory and install the necessary npm packages:
+
+cd server
+npm ci
+Start the Backend Server
+Start the server with the following command:
+
+nodemon src/server.js
+Your backend should now be running on http://localhost:3001/.
+
+4. Frontend Setup
+Install Dependencies
+Navigate to the frontend directory and install the necessary npm packages:
+
+cd ui
+npm ci
+Start the Frontend Application
+Start the React application with the following command:
+
+npm start
+Your application should now be accessible at http://localhost:3000/.
