@@ -1,0 +1,57 @@
+CREATE TABLE users (
+    user_id VARCHAR(12) PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,  -- Unique college email
+    password VARCHAR(255) NOT NULL,  -- Store securely hashed password
+    role VARCHAR(50) NOT NULL DEFAULT 'student', -- 'student', 'faculty', 'admin', etc.
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE  -- Account activation status
+);
+
+CREATE TABLE achievements (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    achievement_summary TEXT NOT NULL,
+    date_of_achievement DATE NOT NULL,
+    certificate TEXT,
+    photos TEXT[],
+    is_approved BOOLEAN DEFAULT false
+);
+
+CREATE TABLE courses (
+	course_id VARCHAR(255) PRIMARY KEY,
+    sem VARCHAR(255) NOT NULL,
+    course_name VARCHAR(255) NOT NULL,
+    course_credit INT NOT NULL,
+    course_eligibility INT NOT NULL,
+    course_type VARCHAR(255) NOT NULL,
+    faculty_id VARCHAR(255) NOT NULL,
+    available_seats INT NOT NULL,
+    course_syllabus TEXT NOT NULL
+);
+
+CREATE TABLE announcements (
+    announcement_id SERIAL PRIMARY KEY,
+    message VARCHAR(255) NOT NULL,
+    expiry_date TIMESTAMP NOT NULL, 
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE student_courses (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    course_id VARCHAR(255) NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);
+
+
+CREATE TABLE attendance (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    course_id VARCHAR(255) NOT NULL,
+    attendance_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);

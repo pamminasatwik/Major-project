@@ -1,0 +1,138 @@
+name: SonarQube-BackendCode-Scan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: SonarQubeBackendCodeScan
+  cancel-in-progress: true
+env:
+  PRODUCT_VERSION: '99.1.0'
+  AZDO_TOKEN: ${{ secrets.AZDO_ARTIFACTS_ACCESS }}
+  RUN_NUM: ${{github.run_number}}
+  GOVC_URL: 'https://10.40.67.4'
+  #GOVC_USERNAME: 'builduser@servers.ipswitch.com'
+  #GOVC_PASSWORD: ${{ secrets.SERVERS_BUILDUSER_PASS }}
+  GOVC_USERNAME: 'progress\temays'
+  GOVC_PASSWORD: ${{ secrets.BUILDUSER_INFO }}
+  GOVC_INSECURE: 'true'
+  GOVC_DATACENTER: 'Atlanta'
+
+
+jobs:
+  Power-On-Virtual-Machine:
+    runs-on: [govc]
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Clean Workspace
+        shell: powershell
+        run: |
+          Get-ChildItem -Force -ErrorAction Stop -Path . -Recurse | Where-Object { if($_.Attributes -match "ReparsePoint"){$_.Delete()} }
+          Remove-Item $Env:GITHUB_WORKSPACE\* -Recurse -Force -ErrorAction Ignore
+
+      - name: Get Power State of SonarQube System
+        shell: powershell
+        run: |
+          [string] $VmInfo = govc vm.info NM-GH-BLDSYS4
+          $StartOffset = $VmInfo.IndexOf("Power state") + 13
+          $EndOffset = $VmInfo.IndexOf("Boot time") - 1
+          $PowerStateText = $VmInfo.Substring($StartOffset, $EndOffset - $StartOffset).Trim()
+          write-host "NM-GH-BLDSYS4 is $PowerStateText"
+          echo "SonarQube_VM_STATE=$PowerStateText" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Start SonarQube Virtual Machine
+        if: ${{ env.SonarQube_VM_STATE == 'poweredOff' }}
+        run: govc vm.power -on NM-GH-BLDSYS4
+
+      - name: Output IP Address Of SonarQube System
+        shell: powershell
+        run: |
+          [string] $VmIp = govc vm.ip -a -v4 -wait=180s NM-GH-BLDSYS4
+          write-host "NM-GH-BLDSYS4 IP Address is $VmIp"
+
+  build:
+    name: Build
+    runs-on: sonarqube
+    needs: Power-On-Virtual-Machine
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: 'Project\Source'
+          ref: '${{ env.BranchName}}'
+          fetch-depth: 1                                    # Shallow clones should be disabled for a better relevancy of analysis
+      - name: Set up JDK 11                                 # setting up the java 
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.11
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~\sonar\cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+      - name: Cache SonarQube scanner
+        id: cache-sonar-scanner
+        uses: actions/cache@v4
+        with:
+          path: .\.sonar\scanner
+          key: ${{ runner.os }}-sonar-scanner
+          restore-keys: ${{ runner.os }}-sonar-scanner
+      - name: Install SonarQube scanner                       #Installing Sonar-scanner for .net
+        if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          New-Item -Path .\.sonar\scanner -ItemType Directory
+          dotnet tool update dotnet-sonarscanner --tool-path .\.sonar\scanner
+      - name: Build and analyze
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}            # Needed to get PR information, if any
+        shell: powershell
+        run: |
+          .\.sonar\scanner\dotnet-sonarscanner begin /k:"prgs-nm_WUG_AYz6BahhhXuvzhhRmOfn" /d:sonar.login="${{ secrets.SONAR_TOKEN }}" /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}"  /d:sonar.exclusions="**/*.cpp,**/*.c,**/*.objc"
+          
+          $solutionFiles = @(
+            ".\Licensing\Licensing.sln",
+            ".\WugLibs\WUGLibs.sln",
+            ".\Source\WhatsUp.sln",
+            ".\WUGMD\WugDoctor.sln",
+            ".\Source\CoreServices0.sln",
+            ".\Source\CoreServices1.sln",
+            ".\Source\CloudConnectInfrastructure.sln",
+            ".\Source\CoreServices2.sln",
+            ".\Source\ActiveMonitors.sln",
+            ".\Source\CoreServices.Poller.sln",
+            ".\Source\ReleaseUtilities.sln",
+            ".\API\NmApi.sln",
+            ".\NMS\Nm.UI.sln",
+            ".\WhatsUp-UI\Web\WUGUI.sln",
+            ".\Source\Agent.sln",
+            ".\Source\Utilities\WUG Log Tool.sln",
+            ".\Wireless\Wireless.sln",
+            ".\Virtual\WhatsVirtual.sln",
+            ".\NetFlow\NetFlow.sln",
+            ".\LogManagement\LogManagement.sln"
+          )
+          foreach ($solutionFile in $solutionFiles){
+            "C:\Program Files\Microsoft Visual Studio\2022\Professional\Msbuild\Current\Bin\MSBuild.exe" /t:Rebuild "$solutionFile"
+          }
+          .\.sonar\scanner\dotnet-sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+    
+  Shut-Down-Virtual-Machine:
+      runs-on: [govc]
+      needs: build
+      defaults:
+        run:
+          shell: cmd
+
+      steps:
+        - name: Power Off SonarQube Machine
+          if: ${{ env.DEBUG_MODE == 'false' }}
+          run: |
+            govc vm.power -off NM-GH-BLDSYS4
